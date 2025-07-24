@@ -8,6 +8,7 @@ function App() {
   const [brushSize, setBrushSize] = useState(20)
   const [isDrawing, setIsDrawing] = useState(false)
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
+  const cursorUpdateRef = useRef(null)
 
   const getCanvasCoordinates = (event) => {
     const canvas = canvasRef.current
@@ -104,7 +105,14 @@ function App() {
 
   const handleMouseMove = (event) => {
     const coords = getCanvasCoordinates(event)
-    setCursorPos(coords)
+    
+    // Throttle cursor position updates to reduce choppiness
+    if (cursorUpdateRef.current) {
+      cancelAnimationFrame(cursorUpdateRef.current)
+    }
+    cursorUpdateRef.current = requestAnimationFrame(() => {
+      setCursorPos(coords)
+    })
     
     if (isDrawing && hasImage) {
       applyBlur(coords.x, coords.y)
