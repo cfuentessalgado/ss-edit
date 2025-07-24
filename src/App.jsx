@@ -5,10 +5,10 @@ function App() {
   const canvasRef = useRef(null)
   const originalImageRef = useRef(null)
   const [hasImage, setHasImage] = useState(false)
-  const [brushSize, setBrushSize] = useState(20)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
-  const cursorUpdateRef = useRef(null)
+  const [isSelecting, setIsSelecting] = useState(false)
+  const [selectionStart, setSelectionStart] = useState({ x: 0, y: 0 })
+  const [selectionEnd, setSelectionEnd] = useState({ x: 0, y: 0 })
+  const [currentSelection, setCurrentSelection] = useState(null)
 
   const getCanvasCoordinates = (event) => {
     const canvas = canvasRef.current
@@ -24,103 +24,81 @@ function App() {
     }
   }
 
-  const applyBlur = (x, y) => {
+  const applyBlurToRectangle = (x1, y1, x2, y2) => {
     const canvas = canvasRef.current
-    if (!canvas || !originalImageRef.current) return
+    if (!canvas) return
 
-
-    
     const ctx = canvas.getContext('2d')
-    const radius = brushSize / 2
-    const blurRadius = 8 // Fixed blur radius regardless of brush size
     
-    // Get the area we want to blur from the original image
-    const startX = Math.max(0, Math.floor(x - radius))
-    const startY = Math.max(0, Math.floor(y - radius))
-    const endX = Math.min(canvas.width, Math.ceil(x + radius))
-    const endY = Math.min(canvas.height, Math.ceil(y + radius))
+    // Ensure we have proper rectangle bounds
+    const startX = Math.max(0, Math.min(x1, x2))
+    const startY = Math.max(0, Math.min(y1, y2))
+    const endX = Math.min(canvas.width, Math.max(x1, x2))
+    const endY = Math.min(canvas.height, Math.max(y1, y2))
     
     const width = endX - startX
     const height = endY - startY
     
     if (width <= 0 || height <= 0) return
     
-    // Get current canvas data
-    const imageData = ctx.getImageData(startX, startY, width, height)
-    const data = imageData.data
-    const originalData = originalImageRef.current.data
+    // Use CSS filter blur - much simpler and more reliable
+    ctx.save()
     
-    // Apply blur effect pixel by pixel
-    for (let py = 0; py < height; py++) {
-      for (let px = 0; px < width; px++) {
-        const actualX = startX + px
-        const actualY = startY + py
-        
-        // Check if this pixel is within the circular brush
-        const dx = actualX - x
-        const dy = actualY - y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        
-        if (distance <= radius) {
-          let r = 0, g = 0, b = 0, a = 0, count = 0
-          
-          // Sample surrounding pixels for blur effect with fixed radius
-          for (let by = -blurRadius; by <= blurRadius; by++) {
-            for (let bx = -blurRadius; bx <= blurRadius; bx++) {
-              const sampleX = actualX + bx
-              const sampleY = actualY + by
-              
-              if (sampleX >= 0 && sampleX < canvas.width && 
-                  sampleY >= 0 && sampleY < canvas.height) {
-                const sampleIndex = (sampleY * canvas.width + sampleX) * 4
-                r += originalData[sampleIndex]
-                g += originalData[sampleIndex + 1]
-                b += originalData[sampleIndex + 2]
-                a += originalData[sampleIndex + 3]
-                count++
-              }
-            }
-          }
-          
-          // Set the blurred pixel
-          const pixelIndex = (py * width + px) * 4
-          data[pixelIndex] = r / count
-          data[pixelIndex + 1] = g / count
-          data[pixelIndex + 2] = b / count
-          data[pixelIndex + 3] = a / count
-        }
-      }
-    }
+    // Create clipping rectangle
+    ctx.beginPath()
+    ctx.rect(startX, startY, width, height)
+    ctx.clip()
     
-    // Put the blurred data back to canvas
-    ctx.putImageData(imageData, startX, startY)
+    // Apply blur filter and redraw the current canvas state (not original)
+    ctx.filter = 'blur(6px)'
+    
+    // Create temporary canvas with current canvas state
+    const tempCanvas = document.createElement('canvas')
+    const tempCtx = tempCanvas.getContext('2d')
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    
+    // Get current canvas state (including any previous blurs)
+    const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    tempCtx.putImageData(currentImageData, 0, 0)
+    
+    // Draw the current state with blur applied only in clipped area
+    ctx.drawImage(tempCanvas, 0, 0)
+    
+    ctx.restore()
   }
 
   const handleMouseDown = (event) => {
     if (!hasImage) return
-    setIsDrawing(true)
     const coords = getCanvasCoordinates(event)
-    applyBlur(coords.x, coords.y)
+    setIsSelecting(true)
+    setSelectionStart(coords)
+    setSelectionEnd(coords)
+    setCurrentSelection(null)
   }
 
   const handleMouseMove = (event) => {
+    if (!isSelecting || !hasImage) return
     const coords = getCanvasCoordinates(event)
+    setSelectionEnd(coords)
     
-    // Throttle cursor position updates to reduce choppiness
-    if (cursorUpdateRef.current) {
-      cancelAnimationFrame(cursorUpdateRef.current)
-    }
-    cursorUpdateRef.current = requestAnimationFrame(() => {
-      setCursorPos(coords)
+    // Show current selection rectangle
+    setCurrentSelection({
+      x: Math.min(selectionStart.x, coords.x),
+      y: Math.min(selectionStart.y, coords.y),
+      width: Math.abs(coords.x - selectionStart.x),
+      height: Math.abs(coords.y - selectionStart.y)
     })
-    
-    if (isDrawing && hasImage) {
-      applyBlur(coords.x, coords.y)
-    }
   }
 
   const handleMouseUp = () => {
-    setIsDrawing(false)
+    if (!isSelecting || !hasImage) return
+    
+    // Apply blur to the selected rectangle
+    applyBlurToRectangle(selectionStart.x, selectionStart.y, selectionEnd.x, selectionEnd.y)
+    
+    setIsSelecting(false)
+    setCurrentSelection(null)
   }
 
   useEffect(() => {
@@ -168,100 +146,44 @@ function App() {
   }, [])
 
   return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h1>Image Paste Canvas</h1>
-      <p>Press Ctrl+V (or Cmd+V) to paste an image from your clipboard</p>
-      
-      {hasImage && (
-        <div style={{ margin: '20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px' }}>
-          <span>Blur Brush:</span>
-          <button 
-            onClick={() => setBrushSize(Math.max(5, brushSize - 5))}
-            style={{ 
-              padding: '8px 12px', 
-              fontSize: '16px', 
-              cursor: 'pointer',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              background: '#f5f5f5'
-            }}
-          >
-            -
-          </button>
-          <span style={{ minWidth: '60px', fontWeight: 'bold' }}>
-            {brushSize}px
-          </span>
-          <button 
-            onClick={() => setBrushSize(Math.min(100, brushSize + 5))}
-            style={{ 
-              padding: '8px 12px', 
-              fontSize: '16px', 
-              cursor: 'pointer',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              background: '#f5f5f5'
-            }}
-          >
-            +
-          </button>
-          <div 
-            style={{
-              width: `${brushSize}px`,
-              height: `${brushSize}px`,
-              border: '2px solid #666',
-              borderRadius: '50%',
-              marginLeft: '10px',
-              minWidth: '10px',
-              minHeight: '10px'
-            }}
-          />
-        </div>
-      )}
-      
-      <div style={{ position: 'relative', display: 'inline-block' }}>
-        <canvas 
-          ref={canvasRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          style={{ 
-            border: '2px dashed #ccc',
-            maxWidth: '100%',
-            maxHeight: '70vh',
-            display: hasImage ? 'block' : 'none',
-            cursor: hasImage ? 'crosshair' : 'default'
-          }}
-        />
-        
-        {hasImage && (
-          <div
-            style={{
-              position: 'absolute',
-              left: cursorPos.x * (canvasRef.current?.getBoundingClientRect().width / canvasRef.current?.width || 1) - brushSize / 2,
-              top: cursorPos.y * (canvasRef.current?.getBoundingClientRect().height / canvasRef.current?.height || 1) - brushSize / 2,
-              width: `${brushSize}px`,
-              height: `${brushSize}px`,
-              border: '2px solid rgba(255, 0, 0, 0.7)',
-              borderRadius: '50%',
-              pointerEvents: 'none',
-              transform: 'translate(-2px, -2px)'
-            }}
-          />
-        )}
+    <div className="p-6">
+      <div className="text-center mb-6">
+        <h1 className="text-xl font-medium mb-2">Hide Information</h1>
+        <p className="text-gray-600 text-sm">Paste an image (Ctrl+V) and drag to select areas to blur</p>
       </div>
       
-      {!hasImage && (
-        <div style={{
-          border: '2px dashed #ccc',
-          padding: '40px',
-          margin: '20px auto',
-          maxWidth: '600px',
-          color: '#666'
-        }}>
-          No image pasted yet. Copy an image and paste it here!
+      <div className="flex justify-center">
+        <div className="relative">
+          <canvas 
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            className={`max-w-full max-h-[80vh] ${hasImage ? 'block' : 'hidden'}`}
+            style={{ cursor: hasImage ? 'crosshair' : 'default' }}
+          />
+          
+          {/* Selection rectangle overlay */}
+          {currentSelection && (
+            <div
+              className="absolute border-2 border-red-500 bg-red-500 bg-opacity-20 pointer-events-none"
+              style={{
+                left: currentSelection.x * (canvasRef.current?.getBoundingClientRect().width / canvasRef.current?.width || 1),
+                top: currentSelection.y * (canvasRef.current?.getBoundingClientRect().height / canvasRef.current?.height || 1),
+                width: currentSelection.width * (canvasRef.current?.getBoundingClientRect().width / canvasRef.current?.width || 1),
+                height: currentSelection.height * (canvasRef.current?.getBoundingClientRect().height / canvasRef.current?.height || 1)
+              }}
+            />
+          )}
+          
+          {!hasImage && (
+            <div className="border-2 border-dashed border-gray-300 rounded p-16 text-center text-gray-500">
+              <p>Paste an image here</p>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
