@@ -15,6 +15,7 @@ function App() {
   const [position, setPosition] = useState({ x: 50, y: 50 })
   const [isDragging, setIsDragging] = useState(false)
   const [selectedTool, setSelectedTool] = useState('blur')
+  const [showCopyToast, setShowCopyToast] = useState(false)
   const dragRef = useRef()
 
   const getCanvasCoordinates = (event) => {
@@ -65,8 +66,27 @@ function App() {
     ctx.restore()
   }
 
+  const copyToClipboard = async () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    try {
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ])
+          setShowCopyToast(true)
+          setTimeout(() => setShowCopyToast(false), 2000)
+        }
+      }, 'image/png')
+    } catch (err) {
+      console.error('Failed to copy image to clipboard:', err)
+    }
+  }
+
   const handleMouseDown = (event) => {
-    if (!hasImage) return
+    if (!hasImage || selectedTool !== 'blur') return
     const coords = getCanvasCoordinates(event)
     setIsSelecting(true)
     setSelectionStart(coords)
@@ -75,7 +95,7 @@ function App() {
   }
 
   const handleMouseMove = (event) => {
-    if (!isSelecting || !hasImage) return
+    if (!isSelecting || !hasImage || selectedTool !== 'blur') return
     const coords = getCanvasCoordinates(event)
     setSelectionEnd(coords)
     
@@ -88,7 +108,7 @@ function App() {
   }
 
   const handleMouseUp = () => {
-    if (!isSelecting || !hasImage) return
+    if (!isSelecting || !hasImage || selectedTool !== 'blur') return
     
     applyBlurToRectangle(selectionStart.x, selectionStart.y, selectionEnd.x, selectionEnd.y)
     
@@ -183,12 +203,25 @@ function App() {
     }
   }, [isDragging, handleToolbarMouseMove, handleToolbarMouseUp])
 
+  // Global event listeners for canvas selection
+  useEffect(() => {
+    if (isSelecting) {
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [isSelecting, handleMouseMove])
+
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 overflow-hidden">
       <div className="w-full h-full flex flex-col justify-center items-center p-8">
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-            Hide Information
+            Image Editor
           </h1>
           <p className="text-xl text-white/80 max-w-2xl mx-auto">
             Paste an image (Ctrl+V) and drag to select areas to blur
@@ -201,9 +234,8 @@ function App() {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
             className={`block max-w-[85vw] max-h-[65vh] ${hasImage ? '' : 'hidden'}`}
-            style={{ cursor: hasImage ? 'crosshair' : 'default' }}
+            style={{ cursor: hasImage && selectedTool === 'blur' ? 'crosshair' : 'default' }}
           />
           
           {/* Selection rectangle overlay */}
@@ -259,6 +291,19 @@ function App() {
               </svg>
             </button>
 
+            {/* Copy to Clipboard */}
+            <button
+              className="w-12 h-12 border-none rounded-xl cursor-pointer flex items-center justify-center transition-all duration-200 relative overflow-hidden bg-transparent hover:bg-gray-100 hover:scale-105"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={copyToClipboard}
+              title="Copy to clipboard"
+            >
+              <svg className="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+              </svg>
+            </button>
+
             {/* Drag Handle */}
             <div className="flex flex-col gap-1 px-3 opacity-40 cursor-grab active:cursor-grabbing">
               <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
@@ -271,10 +316,22 @@ function App() {
 
       {/* Tool Info */}
       {selectedTool && hasImage && (
-        <div className="fixed bottom-6 left-6 bg-green-600/90 backdrop-blur-md text-white px-2 py-3 rounded-xl shadow-lg border border-gray-700/50 text-sm font-medium z-40 transition-all duration-300 animate-in slide-in-from-bottom-2">
+        <div className="fixed bottom-6 left-6 bg-gray-900/90 backdrop-blur-md text-white px-4 py-3 rounded-xl shadow-lg border border-gray-700/50 text-sm font-medium z-40 transition-all duration-300 animate-in slide-in-from-bottom-2">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
             Blur tool selected
+          </div>
+        </div>
+      )}
+
+      {/* Copy Toast */}
+      {showCopyToast && (
+        <div className="fixed bottom-6 right-6 bg-green-600/90 backdrop-blur-md text-white px-4 py-3 rounded-xl shadow-lg border border-green-500/50 text-sm font-medium z-40 transition-all duration-300 animate-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Copied to clipboard!
           </div>
         </div>
       )}
