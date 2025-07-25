@@ -27,9 +27,22 @@ function App() {
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
     
+    // Handle both mouse and touch events
+    let clientX, clientY
+    if (event.touches && event.touches.length > 0) {
+      clientX = event.touches[0].clientX
+      clientY = event.touches[0].clientY
+    } else if (event.changedTouches && event.changedTouches.length > 0) {
+      clientX = event.changedTouches[0].clientX
+      clientY = event.changedTouches[0].clientY
+    } else {
+      clientX = event.clientX
+      clientY = event.clientY
+    }
+    
     return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
     }
   }
 
@@ -131,6 +144,12 @@ function App() {
 
   const handleMouseDown = (event) => {
     if (!hasImage || selectedTool !== 'blur') return
+    
+    // Prevent default behavior for touch events
+    if (event.type.startsWith('touch')) {
+      event.preventDefault()
+    }
+    
     const coords = getCanvasCoordinates(event)
     setIsSelecting(true)
     setSelectionStart(coords)
@@ -140,6 +159,12 @@ function App() {
 
   const handleMouseMove = (event) => {
     if (!isSelecting || !hasImage || selectedTool !== 'blur') return
+    
+    // Prevent default behavior for touch events
+    if (event.type.startsWith('touch')) {
+      event.preventDefault()
+    }
+    
     const coords = getCanvasCoordinates(event)
     setSelectionEnd(coords)
     
@@ -164,9 +189,19 @@ function App() {
   const handleToolbarMouseDown = useCallback((e) => {
     if (!toolbarRef.current) return
 
+    // Handle both mouse and touch events
+    let clientX, clientY
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+
     dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
+      startX: clientX,
+      startY: clientY,
       startPos: position,
     }
     setIsDragging(true)
@@ -177,8 +212,18 @@ function App() {
 
     e.preventDefault()
     
-    const deltaX = e.clientX - dragRef.current.startX
-    const deltaY = e.clientY - dragRef.current.startY
+    // Handle both mouse and touch events
+    let clientX, clientY
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+    
+    const deltaX = clientX - dragRef.current.startX
+    const deltaY = clientY - dragRef.current.startY
 
     const newX = Math.max(0, Math.min(window.innerWidth - 200, dragRef.current.startPos.x + deltaX))
     const newY = Math.max(0, Math.min(window.innerHeight - 100, dragRef.current.startPos.y + deltaY))
@@ -221,11 +266,15 @@ function App() {
     if (isDragging) {
       document.addEventListener("mousemove", handleToolbarMouseMove)
       document.addEventListener("mouseup", handleToolbarMouseUp)
+      document.addEventListener("touchmove", handleToolbarMouseMove, { passive: false })
+      document.addEventListener("touchend", handleToolbarMouseUp, { passive: false })
     }
 
     return () => {
       document.removeEventListener("mousemove", handleToolbarMouseMove)
       document.removeEventListener("mouseup", handleToolbarMouseUp)
+      document.removeEventListener("touchmove", handleToolbarMouseMove)
+      document.removeEventListener("touchend", handleToolbarMouseUp)
     }
   }, [isDragging, handleToolbarMouseMove, handleToolbarMouseUp])
 
@@ -234,13 +283,49 @@ function App() {
     if (isSelecting) {
       document.addEventListener("mousemove", handleMouseMove)
       document.addEventListener("mouseup", handleMouseUp)
+      document.addEventListener("touchmove", handleMouseMove, { passive: false })
+      document.addEventListener("touchend", handleMouseUp, { passive: false })
     }
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("touchmove", handleMouseMove)
+      document.removeEventListener("touchend", handleMouseUp)
     }
   }, [isSelecting, handleMouseMove])
+
+  // Add touch event listeners directly to canvas with passive: false
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const options = { passive: false }
+    
+    canvas.addEventListener('touchstart', handleMouseDown, options)
+    canvas.addEventListener('touchmove', handleMouseMove, options)
+    canvas.addEventListener('touchend', handleMouseUp, options)
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleMouseDown)
+      canvas.removeEventListener('touchmove', handleMouseMove)
+      canvas.removeEventListener('touchend', handleMouseUp)
+    }
+  }, [handleMouseDown, handleMouseMove, handleMouseUp])
+
+  // Add touch event listeners directly to toolbar with passive: false
+  useEffect(() => {
+    const toolbar = toolbarRef.current
+    if (!toolbar) return
+
+    const options = { passive: false }
+    
+    toolbar.addEventListener('touchstart', handleToolbarMouseDown, options)
+
+    return () => {
+      toolbar.removeEventListener('touchstart', handleToolbarMouseDown)
+    }
+  }, [handleToolbarMouseDown])
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 overflow-hidden">
