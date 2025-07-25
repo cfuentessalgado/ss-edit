@@ -110,6 +110,25 @@ function App() {
     fileInputRef.current?.click()
   }
 
+  const loadImageToCanvas = (file) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+    
+    img.onload = () => {
+      canvas.width = img.width
+      canvas.height = img.height
+      ctx.drawImage(img, 0, 0)
+      
+      originalImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      setHasImage(true)
+    }
+    
+    img.src = URL.createObjectURL(file)
+  }
+
   const handleMouseDown = (event) => {
     if (!hasImage || selectedTool !== 'blur') return
     const coords = getCanvasCoordinates(event)
@@ -189,24 +208,6 @@ function App() {
       }
     }
 
-    const loadImageToCanvas = (file) => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-
-      const ctx = canvas.getContext('2d')
-      const img = new Image()
-      
-      img.onload = () => {
-        canvas.width = img.width
-        canvas.height = img.height
-        ctx.drawImage(img, 0, 0)
-        
-        originalImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        setHasImage(true)
-      }
-      
-      img.src = URL.createObjectURL(file)
-    }
 
     document.addEventListener('paste', handlePaste)
     
