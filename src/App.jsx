@@ -85,6 +85,19 @@ function App() {
     }
   }
 
+  const downloadImage = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const link = document.createElement('a')
+    link.download = 'edited-image.png'
+    link.href = canvas.toDataURL('image/png')
+    
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const handleMouseDown = (event) => {
     if (!hasImage || selectedTool !== 'blur') return
     const coords = getCanvasCoordinates(event)
@@ -301,6 +314,20 @@ function App() {
               <svg className="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                 <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+              </svg>
+            </button>
+
+            {/* Download Image */}
+            <button
+              className="w-12 h-12 border-none rounded-xl cursor-pointer flex items-center justify-center transition-all duration-200 relative overflow-hidden bg-transparent hover:bg-gray-100 hover:scale-105"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={downloadImage}
+              title="Download image"
+            >
+              <svg className="w-5 h-5 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7,10 12,15 17,10"/>
+                <line x1="12" x2="12" y1="15" y2="3"/>
               </svg>
             </button>
 
