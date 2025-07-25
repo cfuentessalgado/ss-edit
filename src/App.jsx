@@ -16,6 +16,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [selectedTool, setSelectedTool] = useState('blur')
   const [showCopyToast, setShowCopyToast] = useState(false)
+  const fileInputRef = useRef(null)
   const dragRef = useRef()
 
   const getCanvasCoordinates = (event) => {
@@ -96,6 +97,17 @@ function App() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (file && file.type.startsWith('image/')) {
+      loadImageToCanvas(file)
+    }
+  }
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click()
   }
 
   const handleMouseDown = (event) => {
@@ -265,8 +277,24 @@ function App() {
           )}
           
           {!hasImage && (
-            <div className="w-[800px] h-[500px] bg-white/95 backdrop-blur-md border-2 border-dashed border-indigo-300 rounded-xl flex items-center justify-center text-gray-500 text-xl font-medium transition-all duration-300 hover:border-indigo-500 hover:bg-white hover:-translate-y-1 hover:shadow-lg">
-              <p>Paste an image here</p>
+            <div className="w-[800px] h-[500px] bg-white/95 backdrop-blur-md border-2 border-dashed border-indigo-300 rounded-xl flex flex-col items-center justify-center text-gray-500 text-xl font-medium transition-all duration-300 hover:border-indigo-500 hover:bg-white hover:-translate-y-1 hover:shadow-lg gap-6">
+              <p>Paste an image or upload a file</p>
+              <button
+                onClick={triggerFileUpload}
+                className="flex items-center gap-3 px-6 py-3 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors duration-200 text-base font-medium"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Upload Image
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
             </div>
           )}
         </div>
@@ -362,6 +390,7 @@ function App() {
           </div>
         </div>
       )}
+
     </div>
   )
 }
